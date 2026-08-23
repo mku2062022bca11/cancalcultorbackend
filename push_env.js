@@ -19,3 +19,5 @@ const pushEnv = (key, value) => {
 
 pushEnv('MONGODB_URI', process.env.MONGODB_URI);
 pushEnv('JWT_SECRET', process.env.JWT_SECRET || 'fallback_secret_key_123');
+pushEnv('FRONTEND_URL', process.env.FRONTEND_URL || 'https://cancalculatorfrontend.vercel.app');
+
