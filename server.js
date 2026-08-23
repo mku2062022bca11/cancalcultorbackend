@@ -5,27 +5,47 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-const allowedOrigins = [
-  'https://cancalculatorfrontend.vercel.app',
-  process.env.FRONTEND_URL,
-  'http://localhost:5173',
-  'http://localhost:3000'
-].filter(Boolean);
+const app = express();
 
+// Enable CORS for all routes and handle preflight OPTIONS requests
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl requests) or matching origins
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
-      callback(null, true);
-    } else {
-      callback(null, true); // Permissive CORS for smooth deployment
-    }
-  },
+  origin: true,
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
 }));
+
+app.options('*', cors());
 app.use(express.json());
+
+// MongoDB connection management for Vercel serverless functions
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/ss_water_plates';
+
+let isConnected = false;
+const connectDB = async () => {
+  if (isConnected || mongoose.connection.readyState === 1) {
+    isConnected = true;
+    return;
+  }
+  try {
+    await mongoose.connect(MONGODB_URI);
+    isConnected = true;
+    console.log('Connected to MongoDB');
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+  }
+};
+
+// Ensure DB is connected on each request
+app.use(async (req, res, next) => {
+  await connectDB();
+  next();
+});
+
+// Root route
+app.get('/api', (req, res) => {
+  res.json({ status: 'ok', message: 'Can Calculator API server running' });
+});
 
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
@@ -35,19 +55,13 @@ app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 
 const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/ss_water_plates';
 
-mongoose.connect(MONGODB_URI)
-  .then(() => {
-    console.log('Connected to MongoDB');
-    // Only listen on a port if not running in Vercel serverless environment
-    if (!process.env.VERCEL) {
-      app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-      });
-    }
-  })
-  .catch(err => console.error('MongoDB connection error:', err));
+if (!process.env.VERCEL) {
+  connectDB().then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  });
+}
 
-// Export the Express API for Vercel Serverless
 module.exports = app;
